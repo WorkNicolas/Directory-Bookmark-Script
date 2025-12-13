@@ -52,9 +52,9 @@ notepad $PROFILE
 ### Create a bookmark
 
 ```bash
-bookmark ./               # current directory
-bookmark ./path/to/dir/   # specific directory
-bookmark ../              # parent directory
+bookmark --create .               # current directory
+bookmark --create ./path/to/dir/  # specific directory
+bookmark -c ../                   # short form
 ```
 
 You will be prompted:
@@ -81,8 +81,8 @@ Errors:
 ### Jump to a bookmark
 
 ```bash
-bookmark sample_title
-bm sample_title
+bookmark --jump sample_title
+bm -j sample_title
 ```
 
 ### List all bookmarks
@@ -92,7 +92,7 @@ bookmark ls
 bm ls
 ```
 
-(Printed horizontally, e.g. `proj docs src`)
+(Printed one title per line.)
 
 ### Remove a bookmark
 

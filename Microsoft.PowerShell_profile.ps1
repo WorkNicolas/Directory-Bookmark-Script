@@ -13,6 +13,15 @@ function bookmark {
         New-Item -ItemType File -Path $Global:BookmarkFile -Force | Out-Null
     }
 
+    if (-not $Arg1 -or $Arg1 -in @('-h', '--help')) {
+        Write-Output "Usage:"
+        Write-Output "  bm --create|-c [dir]     Create bookmark for dir (default: current directory)"
+        Write-Output "  bm --jump|-j <title>     Jump to bookmark by title"
+        Write-Output "  bm ls                    List bookmark titles"
+        Write-Output "  bm rm <title>            Remove bookmark by title"
+        return
+    }
+
     # bookmark ls
     if ($Arg1 -eq "ls") {
         $titles = @()
@@ -71,17 +80,15 @@ function bookmark {
         return
     }
 
-    # Determine path to bookmark
-    $path = $null
-    if (-not $Arg1) {
-        # bookmark       -> current directory
-        $path = (Get-Location).Path
-    } else {
-        $path = $Arg1
-    }
+    # bookmark -c [path] / bookmark --create [path]
+    if ($Arg1 -in @('-c', '--create')) {
+        $path = if ($Arg2) { $Arg2 } else { (Get-Location).Path }
 
-    # If Arg1 is a directory path, create a bookmark
-    if (Test-Path -LiteralPath $path -PathType Container) {
+        if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+            Write-Host "[ERROR] - could not resolve directory: $path"
+            return
+        }
+
         # Use fully-qualified Resolve-Path to ignore aliases/wrapper functions
         $fullPath = (Microsoft.PowerShell.Management\Resolve-Path -LiteralPath $path).Path
 
@@ -121,31 +128,43 @@ function bookmark {
         return
     }
 
-    # Otherwise, treat Arg1 as a bookmark title to jump to
-    $wantedTitle = $Arg1
-    $dest = $null
-
-    foreach ($line in Get-Content $Global:BookmarkFile) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        $parts = $line -split '\|', 2
-        if ($parts[0] -eq $wantedTitle) {
-            $dest = $parts[1]
-            break
+    # bookmark -j <title> / bookmark --jump <title>
+    if ($Arg1 -in @('-j', '--jump')) {
+        $wantedTitle = $Arg2
+        if (-not $wantedTitle) {
+            Write-Host "[ERROR] - missing bookmark name"
+            return
         }
-    }
 
-    if (-not $dest) {
-        Write-Host "[ERROR] - $wantedTitle doesn't exist"
+        $dest = $null
+
+        foreach ($line in Get-Content $Global:BookmarkFile) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $parts = $line -split '\|', 2
+            if ($parts[0] -eq $wantedTitle) {
+                $dest = $parts[1]
+                break
+            }
+        }
+
+        if (-not $dest) {
+            Write-Host "[ERROR] - $wantedTitle doesn't exist"
+            return
+        }
+
+        if (-not (Test-Path -LiteralPath $dest -PathType Container)) {
+            Write-Host "[ERROR] - failed to cd into $dest"
+            return
+        }
+
+        # Use fully-qualified Set-Location (like builtin cd)
+        Microsoft.PowerShell.Management\Set-Location -LiteralPath $dest
         return
     }
 
-    if (-not (Test-Path -LiteralPath $dest -PathType Container)) {
-        Write-Host "[ERROR] - failed to cd into $dest"
-        return
-    }
-
-    # Use fully-qualified Set-Location (like builtin cd)
-    Microsoft.PowerShell.Management\Set-Location -LiteralPath $dest
+    Write-Host "[ERROR] - unknown command: $Arg1"
+    Write-Host "Run: bm --help"
+    return
 }
 
 Set-Alias bm bookmark

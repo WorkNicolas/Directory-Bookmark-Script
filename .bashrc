@@ -5,54 +5,26 @@ bookmark() {
   local path title exists dest tmpfile found
   [[ -f "$BOOKMARK_FILE" ]] || touch "$BOOKMARK_FILE"
 
-  # list bookmarks
-  if [[ "$1" == "ls" ]]; then
-    local titles=()
-    while IFS='|' read -r t d; do
-      [[ -n "$t" ]] && titles+=("$t")
-    done < "$BOOKMARK_FILE"
-    # print each title on its own line
-    [[ ${#titles[@]} -gt 0 ]] && printf '%s\n' "${titles[@]}"
-    return
+  if [[ -z "$1" || "$1" == "-h" || "$1" == "--help" ]]; then
+    cat <<'EOF'
+Usage:
+  bm --create|-c [dir]     Create bookmark for dir (default: current directory)
+  bm --jump|-j <title>     Jump to bookmark by title
+  bm ls                    List bookmark titles
+  bm rm <title>            Remove bookmark by title
+EOF
+    return 0
   fi
 
-  # remove bookmark
-  if [[ "$1" == "rm" ]]; then
-    local name="$2"
-    if [[ -z "$name" ]]; then
-      echo "[ERROR] - missing bookmark name"
+  # explicit create mode: bm -c [dir] / bm --create [dir]
+  if [[ "$1" == "-c" || "$1" == "--create" ]]; then
+    path="${2:-$PWD}"
+
+    if [[ ! -d "$path" ]]; then
+      echo "[ERROR] - could not resolve directory: $path"
       return 1
     fi
 
-    found=0
-    tmpfile="$(mktemp)"
-    while IFS='|' read -r t d; do
-      if [[ "$t" == "$name" ]]; then
-        found=1
-        continue
-      fi
-      [[ -n "$t" ]] && printf '%s|%s\n' "$t" "$d" >> "$tmpfile"
-    done < "$BOOKMARK_FILE"
-    mv "$tmpfile" "$BOOKMARK_FILE"
-
-    if (( found )); then
-      echo "[SUCCESS] - $name removed"
-    else
-      echo "[ERROR] - $name doesn't exist"
-      return 1
-    fi
-    return
-  fi
-
-  # no arg = bookmark current directory
-  if [[ -z "$1" ]]; then
-    path="$PWD"
-  else
-    path="$1"
-  fi
-
-  # if arg is an existing directory -> create bookmark for that directory
-  if [[ -d "$path" ]]; then
     # Use builtin cd in a subshell so we don't capture any custom cd/ls output
     path="$(
       builtin cd -- "$path" 2>/dev/null || exit 1
@@ -96,25 +68,77 @@ bookmark() {
     return
   fi
 
-  # otherwise: treat arg as bookmark title to jump to
-  title="$1"
-  dest=""
-  while IFS='|' read -r t d; do
-    if [[ "$t" == "$title" ]]; then
-      dest="$d"
-      break
+  # explicit jump mode: bm -j <title> / bm --jump <title>
+  if [[ "$1" == "-j" || "$1" == "--jump" ]]; then
+    title="$2"
+    if [[ -z "$title" ]]; then
+      echo "[ERROR] - missing bookmark name"
+      return 1
     fi
-  done < "$BOOKMARK_FILE"
 
-  if [[ -z "$dest" ]]; then
-    echo "[ERROR] - $title doesn't exist"
-    return 1
+    dest=""
+    while IFS='|' read -r t d; do
+      if [[ "$t" == "$title" ]]; then
+        dest="$d"
+        break
+      fi
+    done < "$BOOKMARK_FILE"
+
+    if [[ -z "$dest" ]]; then
+      echo "[ERROR] - $title doesn't exist"
+      return 1
+    fi
+
+    cd "$dest" || {
+      echo "[ERROR] - failed to cd into $dest"
+      return 1
+    }
+
+    return
   fi
 
-  cd "$dest" || {
-    echo "[ERROR] - failed to cd into $dest"
-    return 1
-  }
+  # list bookmarks
+  if [[ "$1" == "ls" ]]; then
+    local titles=()
+    while IFS='|' read -r t d; do
+      [[ -n "$t" ]] && titles+=("$t")
+    done < "$BOOKMARK_FILE"
+    # print each title on its own line
+    [[ ${#titles[@]} -gt 0 ]] && printf '%s\n' "${titles[@]}"
+    return
+  fi
+
+  # remove bookmark
+  if [[ "$1" == "rm" ]]; then
+    local name="$2"
+    if [[ -z "$name" ]]; then
+      echo "[ERROR] - missing bookmark name"
+      return 1
+    fi
+
+    found=0
+    tmpfile="$(mktemp)"
+    while IFS='|' read -r t d; do
+      if [[ "$t" == "$name" ]]; then
+        found=1
+        continue
+      fi
+      [[ -n "$t" ]] && printf '%s|%s\n' "$t" "$d" >> "$tmpfile"
+    done < "$BOOKMARK_FILE"
+    mv "$tmpfile" "$BOOKMARK_FILE"
+
+    if (( found )); then
+      echo "[SUCCESS] - $name removed"
+    else
+      echo "[ERROR] - $name doesn't exist"
+      return 1
+    fi
+    return
+  fi
+
+  echo "[ERROR] - unknown command: $1"
+  echo "Run: bm --help"
+  return 1
 }
 
 alias bm=bookmark
